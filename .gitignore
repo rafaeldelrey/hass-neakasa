@@ -13,6 +13,5 @@ htmlcov/
 *.swp
 *.swo
 *~
-uv.lock
 .venv/
 

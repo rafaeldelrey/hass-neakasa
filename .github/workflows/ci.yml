@@ -18,6 +18,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          python-version: "3.14"
       - run: uv sync --group lint
       - run: uv run ruff check custom_components/neakasa/ tests/
       - run: uv run ruff format --check custom_components/neakasa/ tests/
@@ -30,6 +31,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          python-version: "3.14"
       - run: uv sync --group lint --group dev
       - run: uv run mypy --no-site-packages custom_components/neakasa/
 
@@ -42,6 +44,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
+          python-version: "3.14"
       - run: uv sync --group dev
       - run: uv run pytest --cov-fail-under=90 -v
 
