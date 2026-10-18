@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.core import callback
@@ -13,6 +13,10 @@ from ..coordinator import NeakasaCoordinator, NeakasaDeviceSnapshot
 
 if TYPE_CHECKING:
     from homeassistant.helpers.device_registry import DeviceInfo
+
+# Records kept in the `recent_visits` attribute, newest first. About 110 bytes each, so
+# 100 stay well under the recorder's 16 KiB limit for an entity's attributes.
+MAX_RECENT_VISITS = 100
 
 
 class NeakasaLastUsageSensor(CoordinatorEntity[NeakasaCoordinator], SensorEntity):
@@ -67,3 +71,32 @@ class NeakasaLastUsageSensor(CoordinatorEntity[NeakasaCoordinator], SensorEntity
             return datetime.fromtimestamp(raw / 1000, tz=UTC)
         except (TypeError, ValueError):
             return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """
+        Return the box's recent visits, including those no cat was identified for.
+
+        Each visit has its start and end (ISO 8601, UTC), the measured weight in kg and
+        the identified cat's name, or None when the box matched no cat profile. The cat
+        weight sensors only expose identified visits, one per cat.
+        """
+        snap = self._snap
+        if snap is None:
+            return {}
+        names = {str(cat.get("id")): cat.get("name") for cat in snap.cat_list}
+        visits: list[dict[str, Any]] = []
+        for record in snap.record_list[:MAX_RECENT_VISITS]:
+            start = record.get("start_time")
+            end = record.get("end_time")
+            if not isinstance(start, int | float) or not isinstance(end, int | float):
+                continue
+            visits.append(
+                {
+                    "start": datetime.fromtimestamp(start, tz=UTC).isoformat(),
+                    "end": datetime.fromtimestamp(end, tz=UTC).isoformat(),
+                    "weight_kg": record.get("weight"),
+                    "cat": names.get(str(record.get("cat_id"))),
+                }
+            )
+        return {"recent_visits": visits}

@@ -9,7 +9,10 @@ from custom_components.neakasa.sensor import async_setup_entry
 from custom_components.neakasa.sensor.bin_state import NeakasaBinStateSensor
 from custom_components.neakasa.sensor.bucket_status import NeakasaBucketStatusSensor
 from custom_components.neakasa.sensor.cat_weight import NeakasaCatWeightSensor
-from custom_components.neakasa.sensor.last_usage import NeakasaLastUsageSensor
+from custom_components.neakasa.sensor.last_usage import (
+    MAX_RECENT_VISITS,
+    NeakasaLastUsageSensor,
+)
 from custom_components.neakasa.sensor.sand_level_state import (
     NeakasaSandLevelStateSensor,
 )
@@ -204,6 +207,70 @@ def test_last_usage() -> None:
     sensor = NeakasaLastUsageSensor(_mock_coord(), FAKE_DEVICE_INFO, "iot-001")
     sensor.hass = MagicMock()
     assert sensor.native_value is not None  # timestamp
+
+
+def test_last_usage_recent_visits_include_unidentified() -> None:
+    snap = _cat_weight_snap(
+        [
+            {
+                "cat_id": 0,
+                "weight": 5.3,
+                "start_time": 1760788000,
+                "end_time": 1760788042,
+            },
+            {
+                "cat_id": 4242,
+                "weight": 5.9,
+                "start_time": 1760787000,
+                "end_time": 1760787055,
+            },
+            {
+                "cat_id": 4242,
+                "weight": 5.8,
+                "start_time": None,
+                "end_time": 1760786000,
+            },
+        ]
+    )
+    snap.cat_list.append({"id": 4242, "name": "Luna"})
+    sensor = NeakasaLastUsageSensor(_mock_coord(snap), FAKE_DEVICE_INFO, "iot-001")
+    assert sensor.extra_state_attributes == {
+        "recent_visits": [
+            {
+                "start": "2025-10-18T11:46:40+00:00",
+                "end": "2025-10-18T11:47:22+00:00",
+                "weight_kg": 5.3,
+                "cat": None,
+            },
+            {
+                "start": "2025-10-18T11:30:00+00:00",
+                "end": "2025-10-18T11:30:55+00:00",
+                "weight_kg": 5.9,
+                "cat": "Luna",
+            },
+        ]
+    }
+
+
+def test_last_usage_recent_visits_capped() -> None:
+    records = [
+        {
+            "cat_id": 0,
+            "weight": 5.0,
+            "start_time": 1760000000 + i,
+            "end_time": 1760000030 + i,
+        }
+        for i in range(MAX_RECENT_VISITS + 20)
+    ]
+    sensor = NeakasaLastUsageSensor(
+        _mock_coord(_cat_weight_snap(records)), FAKE_DEVICE_INFO, "iot-001"
+    )
+    assert len(sensor.extra_state_attributes["recent_visits"]) == MAX_RECENT_VISITS
+
+
+def test_last_usage_recent_visits_without_snapshot() -> None:
+    sensor = NeakasaLastUsageSensor(_mock_coord(None), FAKE_DEVICE_INFO, "iot-001")
+    assert sensor.extra_state_attributes == {}
 
 
 # ---------------------------------------------------------------------------
